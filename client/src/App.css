@@ -1,0 +1,168 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b1120;
+  color: #f8fafc;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.activities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.activity-card {
+  background: #172033;
+  border: 1px solid #293449;
+  border-radius: 16px;
+  padding: 24px;
+
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.activity-card:hover {
+  transform: translateY(-3px);
+  border-color: #60a5fa;
+}
+
+.activity-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.activity-card h3 {
+  margin: 8px 0;
+  font-size: 20px;
+}
+
+.activity-date,
+.activity-type,
+.stat-label {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.pr-badge {
+  background: #14532d;
+  color: #86efac;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.activity-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px 12px;
+}
+
+.activity-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.stat-value small {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+
+@media (max-width: 600px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .activities-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.date-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  color-scheme: dark;
+}
+
+.date-picker label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selected-date {
+  background: #172033;
+  border: 1px solid #293449;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+
+.date-picker input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.date-picker label:focus-within {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.date-picker button,
+.date-picker input {
+  background: #172033;
+  color: #f8fafc;
+  border: 1px solid #293449;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+  font: inherit;
+}
+
+.date-picker button {
+  cursor: pointer;
+}
+
+.date-picker button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.date-picker :focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}

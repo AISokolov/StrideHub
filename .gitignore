@@ -1,0 +1,23 @@
+# Dependencies and generated output
+node_modules/
+dist/
+dist-ssr/
+coverage/
+
+# Local environment and secrets (keep shareable templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Logs
+logs/
+*.log
+
+# Editor and OS files
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
