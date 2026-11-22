@@ -164,9 +164,10 @@ network. This milestone does not change the Express backend or database.
    as background work. Settings displays current state and the last successful upload.
    The existing home-screen **Sync to Server** button uses this same flow.
 
-Debug BuildConfig defaults to the development URL and injects only a locally supplied
-token. Release BuildConfig contains empty defaults and never embeds the development
-token. Existing encrypted settings take precedence over build defaults. You can edit
+Debug BuildConfig defaults to `https://stridehub.com` unless a local override supplies
+another URL, and injects only a locally supplied token. Release BuildConfig uses
+`https://stridehub.com` with an empty token. Existing encrypted settings take precedence
+over build defaults. See the [deployment guide](../DEPLOYMENT.md) for VPS setup. You can edit
 the URL/token in Settings; a blank token keeps the existing token for the same origin.
 Changing origins requires a new token. Clearing the URL explicitly disables sync,
 including build defaults, without deleting health data.

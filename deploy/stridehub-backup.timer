@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily StrideHub backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Europe/Ljubljana
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

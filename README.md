@@ -115,3 +115,6 @@ separately, allowing available health data to remain visible if Garmin fails.
 
 For Android build instructions and device checks, see the
 [Android README](android/README.md) and [testing guide](android/TESTING.md).
+
+For Docker, HTTPS, Android connection settings, and database backups, follow the
+[step-by-step VPS deployment guide](DEPLOYMENT.md).

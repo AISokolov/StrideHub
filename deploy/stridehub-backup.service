@@ -1,0 +1,11 @@
+[Unit]
+Description=Create and verify a StrideHub SQLite backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/stridehub
+ExecStart=/usr/bin/docker compose exec -T api node scripts/backup-db.js
+TimeoutStartSec=15min
+UMask=0077
