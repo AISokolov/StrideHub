@@ -1,0 +1,4 @@
+# Copy to sync.local.properties (Git-ignored). Never commit the real token.
+# Environment variables with these names override this file.
+STRIDEHUB_SYNC_URL=http://192.168.0.79:3001
+STRIDEHUB_SYNC_TOKEN=

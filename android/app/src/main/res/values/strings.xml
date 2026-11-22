@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">StrideHub</string>
-    <string name="widget_description">Your daily steps and latest sleep, available offline.</string>
-    <string name="widget_steps_placeholder">Steps: —</string>
-    <string name="widget_sleep_placeholder">Sleep: —</string>
+    <string name="widget_description">Your steps, latest sleep and Garmin workouts, available offline.</string>
+    <string name="widget_updated_placeholder">Updated: —</string>
+    <string name="widget_steps_placeholder">👣 —</string>
+    <string name="widget_sleep_placeholder">🌙 —</string>
 </resources>

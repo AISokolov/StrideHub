@@ -166,3 +166,26 @@ body {
   outline: 2px solid #60a5fa;
   outline-offset: 3px;
 }
+
+button, .login-panel input {
+  background: #172033;
+  color: #f8fafc;
+  border: 1px solid #293449;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: default; }
+:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.health-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-bottom: 32px; }
+.health-value { font-size: 32px; font-weight: 600; margin: 16px 0; }
+.sleep-sessions { list-style: none; padding: 0; font-size: 14px; overflow-wrap: anywhere; }
+.sleep-sessions li + li { border-top: 1px solid #293449; margin-top: 12px; padding-top: 12px; }
+.sleep-sessions small { color: #94a3b8; }
+.login-panel { max-width: 440px; }
+.login-panel form { display: grid; gap: 12px; margin: 24px 0; }
+.refresh-button { margin-top: 24px; }
+[role="alert"] { color: #fda4af; }
+@media (max-width: 600px) { .health-grid { grid-template-columns: 1fr; } }

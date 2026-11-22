@@ -1,8 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val syncLocal = Properties().apply {
+    val file = rootProject.file("sync.local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+fun devSetting(name: String, fallback: String = "") =
+    providers.environmentVariable(name).orNull ?: syncLocal.getProperty(name, fallback)
+fun quoted(value: String): String = "\"" + value.map { char ->
+    when (char) {
+        '\\' -> "\\\\"
+        '"' -> "\\\""
+        else -> if (char.isISOControl()) "\\u%04x".format(char.code) else char.toString()
+    }
+}.joinToString("") + "\""
 
 android {
     namespace = "com.stridehub.android"
@@ -14,6 +30,14 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "SYNC_BASE_URL", "\"\"")
+        buildConfigField("String", "SYNC_TOKEN", "\"\"")
+    }
+    buildTypes {
+        getByName("debug") {
+            buildConfigField("String", "SYNC_BASE_URL", quoted(devSetting("STRIDEHUB_SYNC_URL", "http://192.168.0.79:3001")))
+            buildConfigField("String", "SYNC_TOKEN", quoted(devSetting("STRIDEHUB_SYNC_TOKEN")))
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {

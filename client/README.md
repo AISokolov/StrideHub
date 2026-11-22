@@ -1,16 +1,21 @@
-# React + Vite
+# StrideHub dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite dashboard with session login, the existing date picker/Garmin cards,
+and Health Connect steps/sleep cards.
 
-Currently, two official plugins are available:
+See [the root README](../README.md) for server configuration, the password-hash
+command, Android integration, security, testing, and deployment.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```powershell
+npm ci
+npm run dev
+npm test
+npm run lint
+npm run build
+```
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Open http://localhost:5173. Vite proxies /api to http://127.0.0.1:3001 by default;
+set the Vite process BACKEND_URL to change it. No credentials belong in VITE_*
+variables or frontend source. Production requires same-origin HTTPS hosting of
+client/dist and /api via a reverse proxy. The browser's origin must exactly match
+the server DASHBOARD_ORIGIN for login/logout CSRF verification.

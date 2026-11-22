@@ -21,3 +21,10 @@ logs/
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3

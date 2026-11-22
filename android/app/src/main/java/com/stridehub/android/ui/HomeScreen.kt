@@ -24,6 +24,7 @@ fun HomeScreen(state: HomeState, onRefresh: () -> Unit, onSync: () -> Unit,
     onBackground: () -> Unit, onHealthSettings: () -> Unit) {
     var datePickerOpen by remember { mutableStateOf(false) }
     val today = LocalDate.now()
+    val garminToday = state.cache.garmin.today()
     val zone = ZoneId.systemDefault()
     val day = state.cache.days[state.selected.toString()]?.takeIf { it.zoneId == zone.id }
     val sleeps = if (state.selected == today) state.cache.days.values.flatMap { it.sleepSessions }
@@ -80,8 +81,23 @@ fun HomeScreen(state: HomeState, onRefresh: () -> Unit, onSync: () -> Unit,
                     }
                 }
             }
-            Button(onClick = onRefresh, enabled = !state.busy && state.access?.granted == true, modifier = Modifier.fillMaxWidth()) { Text("Refresh Data") }
-            OutlinedButton(onClick = onSync, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Sync to Server") }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val garmin = state.cache.garmin
+                    val workouts = garmin.displayDay(state.selected.toString())
+                    Text(garmin.status(state.selected.toString()), style = MaterialTheme.typography.titleMedium)
+                    workouts?.activities?.forEach { activity ->
+                        Text(activity.title(), fontWeight = FontWeight.SemiBold)
+                        Text(activity.detail(), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text("Garmin updated: ${timestampLabel(workouts?.refreshedAt)}", style = MaterialTheme.typography.bodySmall)
+                    Text("Calendar timezone: ${garmin.calendarZone.id}", style = MaterialTheme.typography.bodySmall)
+                    garmin.message?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = if (garmin.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+            Button(onClick = onRefresh, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Refresh Data") }
+            OutlinedButton(onClick = onSync, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Sync now") }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Local refresh: ${timestampLabel(state.cache.lastRefresh)}", style = MaterialTheme.typography.bodySmall)
                 Text("Selected date refreshed: ${timestampLabel(day?.refreshedAt)}", style = MaterialTheme.typography.bodySmall)
@@ -90,7 +106,7 @@ fun HomeScreen(state: HomeState, onRefresh: () -> Unit, onSync: () -> Unit,
                 state.cache.syncMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 state.cache.backgroundMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
-            Text("Steps and sleep only. Cached values may be older than your latest watch sync.",
+            Text("Health Connect and Garmin. Cached values may be older than your latest watch sync.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -99,7 +115,7 @@ fun HomeScreen(state: HomeState, onRefresh: () -> Unit, onSync: () -> Unit,
             selectableDates = object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
                     val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
-                    return date in today.minusDays(29)..today
+                    return date in minOf(today, garminToday).minusDays(29)..maxOf(today, garminToday)
                 }
             })
         DatePickerDialog(onDismissRequest = { datePickerOpen = false }, confirmButton = {

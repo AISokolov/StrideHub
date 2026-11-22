@@ -19,6 +19,7 @@ export async function getAccessToken() {
         `${BASE_URL}/personalapitoken-service/personal-api/personal-api-key/token`,
         {
             method: "POST",
+            signal: AbortSignal.timeout(15000),
             headers: {
                 Authorization: `ApiKey ${apiKey}`,
                 Accept: "*/*"
@@ -54,6 +55,7 @@ export async function garminGet(path, params = {}) {
     async function request(token) {
         return fetch(url, {
             method: "GET",
+            signal: AbortSignal.timeout(15000),
             headers: {
                 Authorization: `Bearer ${token}`,
                 Accept: "application/json"

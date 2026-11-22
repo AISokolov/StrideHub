@@ -31,12 +31,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             graph.local.cache.catch { mutable.update { it.copy(message = "The local cache could not be read. Restart the app and try again.") } }
-                .collect { cache -> mutable.update { it.copy(cache = cache) } }
+                .collect { cache ->
+                    val today = cache.garmin.today()
+                    mutable.update { it.copy(cache = cache, selected = if (it.selected == lastToday) today else it.selected) }
+                    lastToday = today
+                }
         }
     }
 
     fun onOpen() {
-        val today = LocalDate.now()
+        val today = mutable.value.cache.garmin.today()
         if (today != lastToday) {
             mutable.update { it.copy(selected = if (it.selected == lastToday) today else it.selected) }
             lastToday = today
@@ -50,12 +54,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (mutable.value.busy) return
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
+            val selected = mutable.value.selected
+            // Start independently: denied/slow Health Connect cannot block Garmin.
+            val download = launch {
+                try { graph.refreshGarmin(selected.takeUnless { it == mutable.value.cache.garmin.today() }) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { mutable.update { it.copy(message = "Could not refresh Garmin. Check Settings; cached data is kept.") } }
+            }
             try {
                 val access = graph.health.access()
                 mutable.update { it.copy(access = access) }
                 if (access.granted) {
-                    graph.refresh(mutable.value.selected)
-                    SyncScheduler.upload(getApplication())
+                    graph.refresh(selected)
                 }
             } catch (e: CancellationException) { throw e
             } catch (_: SecurityException) {
@@ -63,7 +73,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     access = it.access?.copy(granted = false)) }
             } catch (_: Exception) {
                 mutable.update { it.copy(message = "Could not refresh Health Connect. Check its permissions and try again. Cached data is shown.") }
-            } finally { mutable.update { it.copy(busy = false) } }
+            } finally {
+                download.join()
+                SyncScheduler.upload(getApplication())
+                mutable.update { it.copy(busy = false) }
+            }
         }
     }
 
@@ -72,9 +86,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
             try {
-                when (graph.sync.upload()) {
-                    UploadResult.NOT_CONFIGURED -> mutable.update { it.copy(message = "Open Settings to enter your HTTPS backend URL and access token.") }
-                    UploadResult.RETRY -> SyncScheduler.upload(getApplication())
+                when (graph.syncNow(mutable.value.selected.takeUnless { it == mutable.value.cache.garmin.today() })) {
+                    UploadResult.NOT_CONFIGURED -> mutable.update { it.copy(message = "Open Settings to enter your backend URL and access token.") }
                     else -> Unit
                 }
             } catch (e: CancellationException) { throw e

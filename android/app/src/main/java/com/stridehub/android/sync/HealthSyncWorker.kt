@@ -25,15 +25,15 @@ class HealthSyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
             retry = true
         }
         // Network constraints belong only to upload: offline local reads must still run.
-        SyncScheduler.upload(applicationContext)
         StrideHubWidget().updateAll(applicationContext)
+        SyncScheduler.upload(applicationContext)
         return if (retry && runAttemptCount < 3) Result.retry() else Result.success()
     }
 }
 
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
-        when (applicationContext.appGraph.sync.upload()) {
+        when (applicationContext.appGraph.networkSync.run()) {
             UploadResult.RETRY -> Result.retry()
             else -> Result.success()
         }

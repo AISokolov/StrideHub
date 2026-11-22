@@ -79,7 +79,7 @@ class HealthDataTest {
         val cache = HealthCache().merge(listOf(original), now)
         assertEquals(cache, CacheJson.decode(CacheJson.encode(cache)))
         val payload = org.json.JSONObject(CacheJson.payload(original))
-        assertTrue(payload.isNull("steps"))
+        assertFalse(payload.has("steps"))
         assertEquals(0, payload.getJSONArray("sleepSessions").length())
         assertEquals("health_connect", payload.getString("source"))
         assertFalse(payload.has("pending"))
@@ -101,7 +101,53 @@ class HealthDataTest {
         assertEquals("", validateBackendUrl(""))
         listOf("http://192.168.1.10:3000", "https://user:secret@example.com", "https://example.com?token=secret",
             "https://example.com/api", "https://example.com/#fragment", "file:///tmp", "https://example.com:99999").forEach {
-            assertThrows(IllegalArgumentException::class.java) { validateBackendUrl(it) }
+            assertThrows(IllegalArgumentException::class.java) { validateBackendUrl(it, allowHttp = false) }
         }
+    }
+
+    @Test fun `debug accepts the development HTTP origin but release rejects it`() {
+        assertEquals("http://192.168.0.79:3001", validateBackendUrl("http://192.168.0.79:3001", allowHttp = true))
+        assertThrows(IllegalArgumentException::class.java) { validateBackendUrl("http://192.168.0.79:3001", allowHttp = false) }
+    }
+
+    @Test fun `rolling recovery covers today and seven previous calendar days`() {
+        val dates = syncDates(LocalDate.parse("2026-11-01"))
+        assertEquals(8, dates.size)
+        assertEquals(LocalDate.parse("2026-10-25"), dates.min())
+        assertEquals(LocalDate.parse("2026-11-01"), dates.max())
+    }
+
+    @Test fun `sync failures and acknowledgements survive cache persistence`() {
+        val cache = HealthCache().merge(listOf(day()), now).copy(syncConfigId = "fingerprint", authBlocked = true,
+            rejectedUploads = mapOf("2026-11-15" to "revision"))
+        assertEquals(cache, CacheJson.decode(CacheJson.encode(cache)))
+        val legacy = org.json.JSONObject(CacheJson.encode(cache)).apply {
+            remove("syncConfigId"); remove("authBlocked"); remove("rejectedUploads")
+        }
+        val restored = CacheJson.decode(legacy.toString())
+        assertEquals(cache.days, restored.days)
+        assertFalse(restored.authBlocked)
+        assertTrue(restored.rejectedUploads.isEmpty())
+    }
+
+    @Test fun `wire payload keeps complete overnight sessions and deduplicates identifiers`() {
+        val night = sleep()
+        val nap = sleep("hc-2")
+        val payload = org.json.JSONObject(CacheJson.payload(day(sessions = listOf(night, nap, night))))
+        assertEquals(setOf("date", "steps", "source", "sleepSessions"), payload.keys().asSequence().toSet())
+        val sessions = payload.getJSONArray("sleepSessions")
+        assertEquals(2, sessions.length())
+        assertEquals(night.startTime, sessions.getJSONObject(0).getString("startTime"))
+        assertEquals(night.endTime, sessions.getJSONObject(0).getString("endTime"))
+        assertEquals("2026-11-15", payload.getString("date"))
+        assertEquals(100L, payload.getLong("steps"))
+    }
+
+    @Test fun `cached timestamps without seconds are normalized for Express validation`() {
+        val legacy = sleep().copy(startTime = "2026-11-14T23:00+01:00", endTime = "2026-11-15T07:00+01:00")
+        val session = org.json.JSONObject(CacheJson.payload(day(sessions = listOf(legacy))))
+            .getJSONArray("sleepSessions").getJSONObject(0)
+        assertEquals("2026-11-14T23:00:00+01:00", session.getString("startTime"))
+        assertEquals("2026-11-15T07:00:00+01:00", session.getString("endTime"))
     }
 }

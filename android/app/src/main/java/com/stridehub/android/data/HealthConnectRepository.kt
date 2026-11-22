@@ -13,6 +13,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 data class HealthAccess(val availability: Int, val granted: Boolean = false,
     val backgroundSupported: Boolean = false, val backgroundGranted: Boolean = false) {
@@ -68,14 +69,14 @@ class HealthConnectRepository(private val context: Context) {
                 val source = record.metadata.dataOrigin.packageName
                 val id = record.metadata.id.ifEmpty { "$source:${record.startTime}:${record.endTime}" }
                 sessions[id] = SleepSession(id,
-                    record.startTime.atOffset(record.startZoneOffset ?: zone.rules.getOffset(record.startTime)).toString(),
-                    record.endTime.atOffset(record.endZoneOffset ?: zone.rules.getOffset(record.endTime)).toString(),
+                    record.startTime.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    record.endTime.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                     duration, interval, if (hasKnownStages) "recorded_sleep" else "session", source)
             }
             token = response.pageToken
         } while (token != null)
         // Include the most recent available sleep even if OHealth has not written
-        // anything in the three-day automatic reconciliation window.
+        // anything in the eight-day automatic reconciliation window.
         val latestWakeDate = sessions.values.maxByOrNull { it.endInstant }?.let { wakeDate(it.endInstant, zone) }
         val readDates = dates + listOfNotNull(latestWakeDate)
         return readDates.sorted().map { date ->

@@ -13,7 +13,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.stridehub.android.AppGraph
+import com.stridehub.android.BuildConfig
 import com.stridehub.android.data.BackendSettings
+import com.stridehub.android.data.HealthCache
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stridehub.android.sync.SyncScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -29,6 +32,8 @@ fun SettingsScreen(graph: AppGraph, onBack: () -> Unit) {
     var token by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(true) }
     var message by remember { mutableStateOf<String?>(null) }
+    val cache by graph.local.cache.collectAsStateWithLifecycle(initialValue = HealthCache())
+    val uploading by graph.sync.syncing.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         try { original = graph.settings.read(); url = original.baseUrl }
         catch (e: CancellationException) { throw e }
@@ -50,7 +55,9 @@ fun SettingsScreen(graph: AppGraph, onBack: () -> Unit) {
                 placeholder = { Text(if (original.token.isEmpty()) "Server-issued bearer token" else "Saved · leave blank to keep") },
                 singleLine = true, visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), enabled = !busy, modifier = Modifier.fillMaxWidth())
-            Text("Saving enables automatic upload of cached steps and sleep to this server. Credentials are encrypted with Android Keystore. Only HTTPS is accepted.", style = MaterialTheme.typography.bodySmall)
+            Text("Saving enables automatic upload of cached steps and sleep to this server. Saved credentials are encrypted with Android Keystore. " +
+                if (BuildConfig.DEBUG) "Development builds also allow HTTP on your trusted local network." else "Only HTTPS is accepted.",
+                style = MaterialTheme.typography.bodySmall)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             message?.let { Text(it) }
             Button(enabled = !busy, onClick = {
@@ -74,10 +81,26 @@ fun SettingsScreen(graph: AppGraph, onBack: () -> Unit) {
             }, modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
             Text("To disconnect, clear the URL and save. The token is removed. Pending data stays on this phone.", style = MaterialTheme.typography.bodySmall)
             HorizontalDivider()
+            Text("Synchronization", style = MaterialTheme.typography.titleMedium)
+            Text("Last successful upload: ${timestampLabel(cache.lastSync)}")
+            Text(if (uploading || busy) "Synchronizing..." else cache.syncMessage ?: "Ready to synchronize.")
+            Text(cache.garmin.message ?: "Garmin workouts have not been downloaded yet.")
+            Text("Garmin last saved: ${timestampLabel(cache.garmin.displayDay(cache.garmin.today().toString())?.refreshedAt)}")
+            OutlinedButton(enabled = !busy && !uploading, onClick = {
+                scope.launch {
+                    busy = true
+                    message = null
+                    try { graph.syncNow() }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { message = "Could not synchronize. Check settings; local data is kept." }
+                    finally { busy = false }
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Sync now") }
+            HorizontalDivider()
             Text("Privacy", style = MaterialTheme.typography.titleMedium)
             Text(PRIVACY_TEXT, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
-const val PRIVACY_TEXT = "StrideHub reads only step totals and sleep sessions from Health Connect. It does not write health records. Data is cached in this app’s private storage and displayed in the app and widget. Anyone who can see your home screen may see widget values. When you configure a server and token, cached steps, sleep times, sleep sources, and durations are sent to that server over HTTPS. No advertising or analytics services receive your data. Background reading is optional and requires a separate permission where supported. Revoke access in Health Connect at any time; existing cached data remains visible. Clear this app’s storage in Android Settings to remove cached data and credentials. Android backup and device transfer are disabled for this app."
+const val PRIVACY_TEXT = "StrideHub reads only step totals and sleep sessions from Health Connect. It does not write health records. Data is cached in this app’s private storage and displayed in the app and widget. Anyone who can see your home screen may see widget values. When you configure a server and token, cached steps, sleep times, sleep sources, and durations are sent to that server. Release builds require HTTPS; development builds may use unencrypted HTTP on a trusted local network. No advertising or analytics services receive your data. Background reading is optional and requires a separate permission where supported. Revoke access in Health Connect at any time; existing cached data remains visible. Clear this app’s storage in Android Settings to remove cached data and saved credentials. Android backup and device transfer are disabled for this app."

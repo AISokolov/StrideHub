@@ -37,6 +37,10 @@ data class HealthCache(
     val lastSync: String? = null,
     val syncMessage: String? = null,
     val backgroundMessage: String? = null,
+    val syncConfigId: String? = null,
+    val authBlocked: Boolean = false,
+    val rejectedUploads: Map<String, String> = emptyMap(),
+    val garmin: GarminCache = GarminCache(),
 ) {
     fun merge(readings: List<DailyHealth>, now: String): HealthCache {
         val updated = days.toMutableMap()
@@ -64,6 +68,8 @@ data class HealthCache(
         return copy(days = updated, lastSync = now)
     }
 }
+
+fun syncDates(today: LocalDate): Set<LocalDate> = (0L..7L).map { today.minusDays(it) }.toSet()
 
 fun dayBounds(date: LocalDate, zone: ZoneId): Pair<Instant, Instant> =
     date.atStartOfDay(zone).toInstant() to date.plusDays(1).atStartOfDay(zone).toInstant()

@@ -2,6 +2,8 @@ package com.stridehub.android.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 object CacheJson {
     fun sleepJson(s: SleepSession) = JSONObject().put("id", s.id)
@@ -17,7 +19,10 @@ object CacheJson {
     fun encode(cache: HealthCache): String = JSONObject().put("version", 1)
         .put("days", JSONArray(cache.days.values.map(::dailyJson)))
         .put("lastRefresh", cache.lastRefresh).put("lastSync", cache.lastSync)
-        .put("syncMessage", cache.syncMessage).put("backgroundMessage", cache.backgroundMessage).toString()
+        .put("syncMessage", cache.syncMessage).put("backgroundMessage", cache.backgroundMessage)
+        .put("syncConfigId", cache.syncConfigId).put("authBlocked", cache.authBlocked)
+        .put("rejectedUploads", JSONObject(cache.rejectedUploads))
+        .put("garmin", GarminJson.encode(cache.garmin)).toString()
 
     private fun JSONObject.optional(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }
 
@@ -37,12 +42,22 @@ object CacheJson {
                         s.getString("durationKind"), s.getString("source"))
                 }.distinctBy { it.id }, d.getString("refreshedAt"), d.getString("revision"), d.getBoolean("pending"))
         }.associateBy { it.date }
+        val rejected = root.optJSONObject("rejectedUploads") ?: JSONObject()
         return HealthCache(days, root.optional("lastRefresh"), root.optional("lastSync"),
-            root.optional("syncMessage"), root.optional("backgroundMessage"))
+            root.optional("syncMessage"), root.optional("backgroundMessage"), root.optional("syncConfigId"),
+            root.optBoolean("authBlocked"), rejected.keys().asSequence().associateWith { rejected.getString(it) },
+            GarminJson.decode(root.optJSONObject("garmin")))
     }
 
-    fun payload(day: DailyHealth): String = dailyJson(day).apply {
-        remove("pending")
-        put("source", "health_connect")
+    fun payload(day: DailyHealth): String = JSONObject().put("date", day.date)
+        .put("source", "health_connect")
+        .put("sleepSessions", JSONArray(day.sleepSessions.distinctBy { it.id }.map { session ->
+            JSONObject().put("id", session.id)
+                .put("startTime", OffsetDateTime.parse(session.startTime).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                .put("endTime", OffsetDateTime.parse(session.endTime).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                .put("durationMinutes", session.durationMinutes)
+                .put("source", session.source)
+        })).apply {
+        day.steps?.let { put("steps", it) }
     }.toString()
 }

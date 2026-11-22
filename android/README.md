@@ -1,8 +1,10 @@
 # StrideHub Android
 
 A Kotlin companion for **OnePlus Watch → OHealth → Health Connect → StrideHub**.
-Reads steps and sleep only. The app and Glance widget work from a private DataStore
-cache without an Express server. No changes are required in `../client` or `../server`.
+Reads steps and sleep from Health Connect and downloads Garmin workouts through the
+existing authenticated Express backend. Home and Glance display a private DataStore
+cache offline. See [the root README](../README.md) for dashboard authentication and
+the completed Garmin integration.
 
 ## Open, build, install
 
@@ -73,15 +75,15 @@ See Google's [Health Connect setup guide](https://developer.android.com/health-a
   local midnight. DST days may have 23 or 25 hours. Missing aggregates show **—**, not
   a fabricated zero.
 - Sleep is paginated and assigned to the phone-local **wake-up date**, including a
-  session ending exactly at midnight. Original timestamp offsets and source package
-  are preserved. After travel, refreshing reinterprets the selected/recent dates in
+  session ending exactly at midnight. Timestamps use the device timezone offset at each instant; the source package
+  and stable Health Connect record ID are preserved. After travel, refreshing reinterprets the selected/recent dates in
   the current phone timezone. Old step values from a different zone are hidden.
 - Known sleeping stages (sleeping/light/deep/REM) are summed without overlapping
   intervals. **Recorded sleep** means only supplied sleep stages; missing stage gaps
   are not inferred. Without known stages, the value is explicitly **session duration**.
 - Today's screen/widget shows the latest cached session; a historical date shows
   its latest session. All sessions for refreshed dates are cached and uploaded.
-- Every refresh re-reads today, the previous two days, and the selected date. This
+- Every refresh re-reads today, the previous seven days, and the selected date. This
   catches delayed OHealth writes and replaces removed/changed records for those days.
   The latest accessible sleep date is included even when it is older than that window.
   Select older dates to reconcile older corrections/deletions. This is a small daily
@@ -94,112 +96,139 @@ See Google's [Health Connect setup guide](https://developer.android.com/health-a
 
 Long-press an empty area of the phone's home screen → **Widgets → StrideHub** → drag
 the widget onto the home screen. Resize it to roughly 2×2 or 4×2 cells. It displays
-today's cached steps, latest sleep (or labeled session duration), and today's last
-refresh time. Tap anywhere to open the app, which refreshes automatically; the app
+today's cached steps (👣), latest sleep/session duration (🌙), and today's last
+health refresh time. Garmin workouts appear only when the cached date matches today
+in the backend's configured timezone. Empty days reserve no Garmin section. Tap
+anywhere to open the app, which refreshes automatically; the app
 also has a manual refresh button. This works even when background reads are unsupported.
 
 The widget updates after local refresh and receives periodic launcher redraws.
 After midnight it shows a placeholder until today's cache exists; a launcher may
 delay that redraw. It never fetches data from the backend.
 
+The app's existing date picker also selects Garmin's date. **Refresh Data** requests
+fresh Garmin data independently of Health Connect permission or read failures.
+See [POLISH_REPORT.md](POLISH_REPORT.md) for the November 18 regression verification.
+
 ## Automatic synchronization
 
-One unique WorkManager job requests a refresh about every **30 minutes**, above the
-15-minute minimum. There is no permanent foreground service. Reads run only after
-checking the background-read feature **and** its separate permission. Otherwise the
-job preserves the cache and the app explains that opening it is required to refresh.
+The existing unique `stridehub-health-refresh` WorkManager job refreshes local data
+about every **30 minutes**. Cache and widget updates happen before uploads and do
+not require a network. Background Health Connect reads still require the separate
+background permission. If unavailable, open the app to refresh; cached uploads may
+continue while the basic steps/sleep permissions remain granted.
 
-Uploads use separate unique work with a connected-network constraint. Local health
-reads therefore still work offline. Temporary network errors and HTTP 408/429/5xx
-retry with exponential backoff. Authentication, certificate, redirect, and missing
-endpoint errors preserve pending data and show a useful message; a later periodic
-run or manual sync can try again. At most ten days are uploaded per run.
+The existing unique `stridehub-upload` job requires a connected network. It uploads
+changed pending dates, at most ten per attempt, including today's rolling eight-day
+recovery window. Unchanged acknowledged revisions are skipped. Transient IO/timeouts,
+408, 429, and 5xx responses use WorkManager exponential backoff. A failed date does
+not prevent other dates from uploading. A 400 or invalid acknowledgement holds that
+revision until the data or settings change. A 401/403 blocks all further attempts,
+including manual attempts, until the URL/token changes. Saving identical credentials
+does not clear that block. No credentials or response bodies are logged.
 
-WorkManager execution is **not exact**. Doze, battery saver, force-stop, and OnePlus
-battery policies may defer work. Reopen after force-stop. If needed, allow background
-activity for StrideHub in the phone's battery settings; this still cannot grant
-Health Connect background-read access or guarantee a fixed schedule.
-See [Android's WorkManager scheduling guidance](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work).
+Last successful upload advances only after the server confirms `success`, the date,
+and the saved steps/session counts. It may represent partial progress when another
+day failed; the status message and pending count show remaining work. WorkManager
+execution is not exact: Doze, force-stop, and OnePlus battery restrictions can defer
+it. Reopen after force-stop. See [WorkManager scheduling guidance](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work).
 
-## Optional Express connection
+## Development Express connection
 
-Open **Settings**, enter the server's HTTPS origin (for example
-`https://stridehub.example.com`) and a **server-issued bearer access token**, then
-save. Saving enables automatic upload of cached data. Do not enter `/api/health/sync`
-in the URL: the app appends it. Clearing the URL and saving disconnects and removes
-the token. Changing settings marks cached days pending for the configured account.
+The existing server is `http://192.168.0.79:3001`. Keep the PC and phone on the same
+trusted Wi-Fi; `localhost` on the phone refers to the phone. The server must listen
+on its LAN interface, and Windows Firewall must permit port 3001 on your private
+network. This milestone does not change the Express backend or database.
 
-URL/token are AES-GCM encrypted with a non-exportable Android Keystore key. Tokens
-and health payloads are not logged. Health cache remains in app-private storage.
-Backup/device transfer is excluded; clearing app storage deletes the cache and token.
-Release builds reject cleartext HTTP and use the system certificate trust store.
+1. Copy `sync.local.properties.example` to **`sync.local.properties`** in this Android
+   directory. This local file is ignored by Git.
+2. Set `STRIDEHUB_SYNC_TOKEN` to the same value configured as **`HEALTH_SYNC_TOKEN`**
+   in the existing Express environment. Set `STRIDEHUB_SYNC_URL` if the PC address
+   changes. Do not add `/api/health/sync` to the base URL.
+3. Alternatively set environment variables `STRIDEHUB_SYNC_TOKEN` and
+   `STRIDEHUB_SYNC_URL` before building; these override the file. Do not put real
+   credentials in command-line Gradle arguments, source files, or committed properties.
+4. Build and install from this directory:
 
-### Future endpoint contract (backend unchanged)
+   ```powershell
+   $env:JAVA_HOME = 'C:\Users\Alex\.jdks\jbr-21.0.11'
+   .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+   adb install -r .\app\build\outputs\apk\debug\app-debug.apk
+   ```
 
-`POST /api/health/sync`, `Authorization: Bearer <token>`, JSON content type, and an
-`Idempotency-Key: <date>-<revision>` header. Payload:
+   If `adb` is not on PATH, use the SDK's `platform-tools/adb.exe`, or Android Studio
+   Run. `install -r` preserves the existing cache/settings; do not uninstall or clear
+   app storage as part of this update.
+5. Open StrideHub, grant steps and sleep access, then **Settings → Sync now**. This
+   refreshes the rolling window, updates the cache/widget, and uses the same uploader
+   as background work. Settings displays current state and the last successful upload.
+   The existing home-screen **Sync to Server** button uses this same flow.
+
+Debug BuildConfig defaults to the development URL and injects only a locally supplied
+token. Release BuildConfig contains empty defaults and never embeds the development
+token. Existing encrypted settings take precedence over build defaults. You can edit
+the URL/token in Settings; a blank token keeps the existing token for the same origin.
+Changing origins requires a new token. Clearing the URL explicitly disables sync,
+including build defaults, without deleting health data.
+
+**Security:** Generated BuildConfig and APKs contain the development token and must
+remain uncommitted/unshared. They are under ignored `app/build/`; do not print them
+or enable verbose build scans/debug logging with credentials configured. APK contents
+can be inspected: this is personal development authentication, not production user
+authentication. HTTP exposes the token and health data to the network; use only your
+trusted development LAN. Debug network policy permits HTTP and user-installed CAs;
+release rejects HTTP and trusts system CAs only. Settings entered at runtime are
+AES-GCM encrypted using Android Keystore. No OAuth/refresh-token flow is implemented.
+
+### Existing backend contract and verification
+
+`POST /api/health/sync` uses `Authorization: Bearer <token>` and JSON:
 
 ```json
 {
   "date": "2026-11-15",
-  "zoneId": "Europe/Ljubljana",
-  "steps": 4319,
+  "steps": 6508,
+  "source": "health_connect",
   "sleepSessions": [{
-    "id": "health-connect-record-id",
-    "startTime": "2026-11-14T23:00:00+01:00",
-    "endTime": "2026-11-15T07:00:00+01:00",
-    "durationMinutes": 450,
-    "sessionDurationMinutes": 480,
-    "durationKind": "recorded_sleep",
-    "source": "source.package.from.health.connect"
-  }],
-  "refreshedAt": "2026-11-15T12:00:00Z",
-  "revision": "unique-revision-id",
-  "source": "health_connect"
+    "id": "stable-health-connect-record-id",
+    "startTime": "2026-11-15T04:46:00+01:00",
+    "endTime": "2026-11-15T13:00:00+01:00",
+    "durationMinutes": 494,
+    "source": "com.heytap.health.international"
+  }]
 }
 ```
 
-Example numbers are documentation only. `steps` may be `null`; an empty sleep array
-means no sessions for that refreshed date. The server must authenticate the user,
-validate the payload, upsert by **user + source + date**, and replace that day's sleep
-set (including deletions), with session IDs unique per user/source. Handle retries
-idempotently and return **2xx only after durable acceptance**. This client supports
-a manually provisioned revocable token, not an OAuth login/refresh flow. A 401/403
-requires replacing the token. The endpoint and token issuance are future backend work.
+Missing steps are **omitted**, never converted to zero. Complete sleep sessions are
+assigned to their device-local wake-up date without splitting at midnight. Health
+Connect record IDs are globally unique and stable; the fallback includes source and
+session instants. Uploads deduplicate repeated IDs. Stage-aware duration semantics
+remain unchanged from the existing app.
 
-### Development on the same Wi-Fi
+Verify a date through the authenticated read endpoint after a real phone sync. With
+`STRIDEHUB_SYNC_TOKEN` already in the shell environment (do not print it):
 
-Use the PC's LAN IP from `ipconfig`, never `localhost` on the phone. Keep the phone
-and PC on the same network and allow the chosen HTTPS port through Windows Firewall
-for private networks. Put an HTTPS reverse proxy in front of the local Express port.
-For example, a separate Caddy configuration (replace the IP and Express port):
-
-```caddyfile
-https://192.168.1.10:8443 {
-    tls internal
-    reverse_proxy 127.0.0.1:3000
-}
+```powershell
+$headers = @{ Authorization = "Bearer $env:STRIDEHUB_SYNC_TOKEN" }
+$day = Get-Date -Format 'yyyy-MM-dd'
+Invoke-RestMethod -Uri "http://192.168.0.79:3001/api/health/daily?date=$day" -Headers $headers
 ```
 
-Run Caddy with that file. Copy **only its public root CA certificate** to the phone
-and install it through Android Settings → Security → Install a certificate → CA
-certificate. The **debug APK only** trusts user-installed CAs; TLS hostname validation
-still applies, so the IP must match the certificate. Configure
-`https://192.168.1.10:8443` in the app. Remove the development CA when finished.
-See [Caddy's internal TLS documentation](https://caddyserver.com/docs/caddyfile/directives/tls).
-Production requires a normally trusted HTTPS certificate. HTTP is not enabled even
-in debug builds. An unavailable endpoint leaves uploads pending and does not affect
-local readings or the widget.
+Compare steps, session IDs/timestamps/durations against Health Connect. Repeat sync:
+steps must be replaced and session counts must not grow. All `/api/health/*` data
+endpoints need the same token. For older days, replace `$day` with `YYYY-MM-DD`.
+
+The current backend upserts steps by date and sleep by ID. It **does not delete**
+sessions removed from Health Connect or clear old steps when the field is omitted.
+Local reconciliation therefore cannot remove stale server records; doing that would
+require a separate backend change. No user health data is deleted by this milestone.
 
 ## Verification and source map
 
 Run the Gradle checks above; see [TESTING.md](TESTING.md) for the device checklist.
-Debug/release builds and all 12 unit tests passed; lint passed with no errors
-(17 advisory warnings). An emulator system crash prevented reliable runtime smoke
-testing; physical OnePlus behavior has not been verified.
-Unit tests cover DST/midnight, stage overlap, missing values, JSON round trips,
-duplicate prevention, deletions, stale acknowledgements, HTTPS validation, and HTTP
-retry classification. These tests do not establish physical OnePlus/OHealth behavior.
+Milestone 3.2 adds HTTP and synchronization-policy tests to the existing health-data
+tests. See TESTING.md for current results and the remaining physical OnePlus checks.
+Build/unit checks cannot establish real OHealth behavior or widget rendering.
 
 - `data/`: Health Connect reads, cache, Keystore settings, authenticated uploads.
 - `sync/`: periodic local refresh and network-constrained upload workers.
@@ -207,3 +236,25 @@ retry classification. These tests do not establish physical OnePlus/OHealth beha
 - `widget/`: responsive Glance widget; `res/xml/`: widget metadata and backup policy.
 - `PermissionsRationaleActivity.kt`: permission rationale/privacy screen for both
   standalone and Android-integrated Health Connect.
+
+### Milestone 3.2 file inventory
+
+Created:
+- `app/src/main/java/com/stridehub/android/data/HealthUploadClient.kt`
+- `app/src/test/java/com/stridehub/android/data/HealthUploadClientTest.kt`
+- `app/src/test/java/com/stridehub/android/data/SyncRepositoryTest.kt`
+- `sync.local.properties.example`
+
+Modified:
+- `.gitignore`, `app/build.gradle.kts`, `README.md`, `TESTING.md`
+- `app/src/debug/AndroidManifest.xml` (removed duplicate application element from the working copy)
+- `app/src/debug/res/xml/debug_network_security.xml`
+- `app/src/main/java/com/stridehub/android/StrideHubApplication.kt`
+- `data/CacheJson.kt`, `data/HealthConnectRepository.kt`, `data/LocalRepository.kt`,
+  `data/Models.kt`, `data/SecureSettings.kt`, `data/SyncRepository.kt`
+- `sync/HealthSyncWorker.kt`, `ui/HomeViewModel.kt`, `ui/SettingsScreen.kt`
+- `app/src/test/java/com/stridehub/android/data/HealthDataTest.kt`
+
+The abbreviated data/sync/ui paths are under `app/src/main/java/com/stridehub/android/`.
+No dependencies were added. Existing frontend/backend working-copy changes were
+left intact; this milestone edits only Android files.
